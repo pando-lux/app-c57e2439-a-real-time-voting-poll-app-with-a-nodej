@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Poll</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --accent: #6c63ff;
+      --accent2: #48d1cc;
+      --text: #e8eaf0;
+      --muted: #7a7f9a;
+      --danger: #ff6b6b;
+      --success: #56cf99;
+      --border: #2a2e45;
+      --radius: 12px;
+      --transition: 0.25s ease;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header p {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 0.95rem;
+    }
+
+    /* Status pill */
+    #status-bar {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    #status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      transition: var(--transition);
+    }
+
+    #status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: var(--transition);
+    }
+
+    #status-pill.connected #status-dot   { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    #status-pill.disconnected #status-dot { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+    /* Polls grid */
+    #polls {
+      display: grid;
+      gap: 24px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    /* Poll card */
+    .poll-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: var(--transition);
+    }
+
+    .poll-card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 18px;
+      line-height: 1.4;
+    }
+
+    /* Option row */
+    .option-row {
+      margin-bottom: 12px;
+    }
+
+    .option-row:last-child { margin-bottom: 0; }
+
+    .option-btn {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0;
+      cursor: pointer;
+      transition: var(--transition);
+      overflow: hidden;
+      position: relative;
+      text-align: left;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent) inset;
+    }
+
+    .option-btn:disabled {
+      cursor: default;
+      opacity: 0.95;
+    }
+
+    /* Voted highlight */
+    .option-btn.voted {
+      border-color: var(--accent);
+      background: #2a273f;
+    }
+
+    .option-btn.voted .option-meta { color: var(--accent); }
+
+    /* Progress fill inside button */
+    .option-fill {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      background: linear-gradient(90deg, rgba(108,99,255,0.18), rgba(72,209,204,0.10));
+      width: 0%;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+      border-radius: 7px;
+    }
+
+    .option-content {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      gap: 12px;
+      z-index: 1;
+    }
+
+    .option-label {
+      font-size: 0.95rem;
+      font-weight: 500;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .option-meta {
+      font-size: 0.82rem;
+      color: var(--muted);
+      white-space: nowrap;
+      transition: var(--transition);
+    }
+
+    /* Voted badge */
+    .voted-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-right: 6px;
+    }
+
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px;
+      height: 46px;
+      margin-bottom: 12px;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Responsive */
+    @media (min-width: 600px) {
+      #polls { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Live Polls</h1>
+  <p>Vote and watch results update in real time</p>
+</header>
+
+<div id="status-bar">
+  <div id="status-pill" class="disconnected">
+    <span id="status-dot"></span>
+    <span id="status-text">Connecting…</span>
+  </div>
+</div>
+
+<div id="polls">
+  <!-- Cards injected by JS -->
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let polls = [];
+  const tallies = {};   // { pollId: { optionId: count, ... } }
+  const voted  = {};    // { pollId: optionId | null }
+
+  // ── WebSocket ──────────────────────────────────────────────────────────────
+  let ws;
+  let retryDelay = 1000;
+  const MAX_RETRY = 30000;
+
+  const statusPill = document.getElementById("status-pill");
+  const statusText = document.getElementById("status-text");
+
+  function setStatus(state, label) {
+    statusPill.className = state;
+    statusText.textContent = label;
+  }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${proto}//${window.location.host}`);
+
+    ws.addEventListener("open", () => {
+      setStatus("connected", "Connected");
+      retryDelay = 1000;
+    });
+
+    ws.addEventListener("close", () => {
+      setStatus("disconnected", `Reconnecting in ${retryDelay / 1000}s…`);
+      setTimeout(() => {
+        retryDelay = Math.min(retryDelay * 2, MAX_RETRY);
+        connect();
+      }, retryDelay);
+    });
+
+    ws.addEventListener("error", () => {
+      // close event will fire after error and trigger reconnect
+    });
+
+    ws.addEventListener("message", (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+
+      if (msg.type === "update") {
+        tallies[msg.pollId] = msg.tally || {};
+        renderPollResults(msg.pollId);
+      }
+    });
+  }
+
+  function sendVote(pollId, optionId) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "vote", pollId, optionId }));
+    }
+  }
+
+  // ── UI Rendering ───────────────────────────────────────────────────────────
+  function totalVotes(pollId) {
+    const t = tallies[pollId] || {};
+    return Object.values(t).reduce((s, n) => s + n, 0);
+  }
+
+  function buildPollCard(poll) {
+    const card = document.createElement("article");
+    card.className = "poll-card";
+    card.id = `poll-${poll.id}`;
+
+    const h2 = document.createElement("h2");
+    h2.textContent = poll.question;
+    card.appendChild(h2);
+
+    for (const opt of poll.options) {
+      const row = document.createElement("div");
+      row.className = "option-row";
+      row.id = `row-${poll.id}-${opt.id}`;
+
+      const btn = document.createElement("button");
+      btn.className = "option-btn";
+      btn.id = `btn-${poll.id}-${opt.id}`;
+      btn.setAttribute("aria-label", `Vote for ${opt.label}`);
+
+      btn.addEventListener("click", () => {
+        if (voted[poll.id]) return;
+        voted[poll.id] = opt.id;
+        sendVote(poll.id, opt.id);
+        // Optimistically disable all options for this poll
+        lockPoll(poll.id);
+      });
+
+      const fill = document.createElement("div");
+      fill.className = "option-fill";
+      fill.id = `fill-${poll.id}-${opt.id}`;
+
+      const content = document.createElement("div");
+      content.className = "option-content";
+
+      const label = document.createElement("span");
+      label.className = "option-label";
+      label.textContent = opt.label;
+
+      const meta = document.createElement("span");
+      meta.className = "option-meta";
+      meta.id = `meta-${poll.id}-${opt.id}`;
+      meta.textContent = "0 votes";
+
+      content.appendChild(label);
+      content.appendChild(meta);
+      btn.appendChild(fill);
+      btn.appendChild(content);
+      row.appendChild(btn);
+      card.appendChild(row);
+    }
+
+    return card;
+  }
+
+  function lockPoll(pollId) {
+    const poll = polls.find(p => p.id === pollId);
+    if (!poll) return;
+    for (const opt of poll.options) {
+      const btn = document.getElementById(`btn-${pollId}-${opt.id}`);
+      if (btn) btn.disabled = true;
+    }
+    // Highlight voted option
+    const votedId = voted[pollId];
+    if (votedId) {
+      const votedBtn = document.getElementById(`btn-${pollId}-${votedId}`);
+      if (votedBtn) {
+        votedBtn.classList.add("voted");
+        const meta = document.getElementById(`meta-${pollId}-${votedId}`);
+        if (meta) {
+          // Prepend badge
+          const badge = document.createElement("span");
+          badge.className = "voted-badge";
+          badge.textContent = "Your vote · ";
+          meta.prepend(badge);
+        }
+      }
+    }
+  }
+
+  function renderPollResults(pollId) {
+    const poll = polls.find(p => p.id === pollId);
+    if (!poll) return;
+    const total = totalVotes(pollId);
+    const t = tallies[pollId] || {};
+
+    for (const opt of poll.options) {
+      const count = t[opt.id] || 0;
+      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+
+      const fill = document.getElementById(`fill-${pollId}-${opt.id}`);
+      const meta = document.getElementById(`meta-${pollId}-${opt.id}`);
+
+      if (fill) fill.style.width = `${pct}%`;
+      if (meta) {
+        // Preserve the "Your vote · " badge if present
+        const badge = meta.querySelector(".voted-badge");
+        const suffix = `${count} vote${count !== 1 ? "s" : ""} · ${pct}%`;
+        if (badge) {
+          meta.textContent = "";
+          meta.appendChild(badge);
+          meta.appendChild(document.createTextNode(suffix));
+        } else {
+          meta.textContent = suffix;
+        }
+      }
+    }
+  }
+
+  function showSkeletons() {
+    const container = document.getElementById("polls");
+    container.innerHTML = "";
+    for (let i = 0; i < 3; i++) {
+      const card = document.createElement("article");
+      card.className = "poll-card";
+      for (let j = 0; j < 4; j++) {
+        const sk = document.createElement("div");
+        sk.className = "skeleton";
+        card.appendChild(sk);
+      }
+      container.appendChild(card);
+    }
+  }
+
+  async function loadPolls() {
+    showSkeletons();
+    try {
+      const res = await fetch("/polls");
+      polls = await res.json();
+    } catch (err) {
+      console.error("Failed to load polls:", err);
+      document.getElementById("polls").innerHTML =
+        '<p style="text-align:center;color:var(--danger)">Failed to load polls. Please refresh.</p>';
+      return;
+    }
+
+    // Initialize tallies and voted state
+    for (const poll of polls) {
+      if (!tallies[poll.id]) tallies[poll.id] = {};
+      voted[poll.id] = null;
+    }
+
+    // Render cards
+    const container = document.getElementById("polls");
+    container.innerHTML = "";
+    for (const poll of polls) {
+      container.appendChild(buildPollCard(poll));
+    }
+  }
+
+  // ── Boot ───────────────────────────────────────────────────────────────────
+  loadPolls().then(() => {
+    connect();
+  });
+
+})();
+</script>
+</body>
+</html>
